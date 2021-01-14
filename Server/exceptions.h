@@ -24,4 +24,11 @@ public:
     ChatIsNotVisibleException* clone() const override {return new ChatIsNotVisibleException(*this);}
 };
 
+class TokenDoesNotExistException: public QException
+{
+public:
+    void raise() const override {throw *this;}
+    TokenDoesNotExistException* clone() const override {return new TokenDoesNotExistException(*this);}
+};
+
 #endif // EXCEPTIONS_H
