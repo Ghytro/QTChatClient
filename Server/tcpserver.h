@@ -66,6 +66,19 @@ public:
         qDebug() << Server::sendMessage(chatID, text, -1, true);
     }
 
+    static void debugGetMessageByID(const size_t& chatID,
+                                    const size_t& messageID,
+                                    const size_t& senderID)
+    {
+        qDebug() << Server::getMessageByID(chatID, messageID, senderID);
+    }
+
+    static void debugGetLastBlockOfMessages(const size_t& chatID,
+                                            const size_t& senderID)
+    {
+        qDebug() << Server::getLastBlockOfMessages(chatID, senderID);
+    }
+
     static void debugUpdAccessToken(const size_t& senderID)
     {
         Server::updAccessToken(senderID);
@@ -78,6 +91,7 @@ public slots:
 private:
     static const unsigned messagesBlockSize = 200;
     static const unsigned userLoginDataBlockSize = 200;
+    static const unsigned accessTokenDataBlockSize = 200;
     static const unsigned accessTokenLen = 100;
 
     enum apiErrorCode
