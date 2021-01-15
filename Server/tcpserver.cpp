@@ -277,6 +277,50 @@ QString Server::apiErrorCodeDesc(const apiErrorCode &err)
         return "Incorrect token sent, please check it's correctness";
         break;
 
+    case CHAT_IS_NOT_VISIBLE:
+        return "Chat is not public, you need to be it's member to get info about it";
+        break;
+
+    case CHAT_DOESNT_EXIST:
+        return "Chat with this id doesnt exist, check the correctness of query parameters";
+        break;
+
+    case USER_DOES_NOT_EXIST:
+        return "User with this id doesn't exist, check the correctness of query parameters";
+        break;
+
+    case USER_NOT_ADMIN:
+        return "You need to be admin of the chat to have access to this operations";
+        break;
+
+    case USER_ALREADY_IN_CHAT:
+        return "User with this id is already in chat";
+        break;
+
+    case USER_NOT_IN_CHAT:
+        return "User with this id is not a member of this chat";
+        break;
+
+    case USER_VALIDATION_FAILURE:
+        return "Incorrect login or password";
+        break;
+
+    case NO_USER_ID:
+        return "No user ID";
+        break;
+
+   case NO_USER_PASSWORD:
+        return "No password";
+        break;
+
+   case NO_CHAT_PROPERTY:
+        return "No chat property";
+        break;
+
+   case NO_CHAT_PROPERTY_VALUE:
+        return "No new value of a property";
+        break;
+
     default:
         return "Unknown error";
         break;
@@ -637,7 +681,7 @@ size_t Server::getTotalMessages(const size_t &chatID, const size_t &querySenderI
     QFile infoFile(QStringLiteral("chats/%1/info.json").arg(chatID));
     if (!infoFile.open(QIODevice::ReadOnly | QIODevice::Text))
     {
-        qDebug() << "Unable to open message file for reading";
+        qDebug() << "Unable to open info file for reading";
         return 0;
     }
     QJsonObject jsonObj = QJsonDocument::fromJson(QString(infoFile.readAll()).toUtf8()).object();
