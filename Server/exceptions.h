@@ -17,6 +17,13 @@ public:
     UserIsNotAdminException* clone() const override {return new UserIsNotAdminException();}
 };
 
+class UserNotFoundException: public QException
+{
+public:
+    void raise() const override {throw *this;}
+    UserNotFoundException* clone() const override {return new UserNotFoundException();}
+};
+
 class ChatIsNotVisibleException: public QException
 {
 public:
