@@ -38,4 +38,11 @@ public:
     TokenDoesNotExistException* clone() const override {return new TokenDoesNotExistException(*this);}
 };
 
+class UserIsAlreadyInChatException: public QException
+{
+public:
+    void raise() const override {throw *this;}
+    UserIsAlreadyInChatException* clone() const override {return new UserIsAlreadyInChatException(*this);}
+};
+
 #endif // EXCEPTIONS_H
