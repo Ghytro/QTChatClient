@@ -18,6 +18,18 @@ public:
         Server::createUser(username, password);
     }
 
+    static void debugAddChatMembership(const size_t &userID,
+                                       const size_t &chatID)
+    {
+        Server::addChatMembership(userID, chatID);
+    }
+
+    static void debugDeleteChatMembership(const size_t &userID,
+                                       const size_t &chatID)
+    {
+        Server::deleteChatMembership(userID, chatID);
+    }
+
     static void debugValidateUser(const size_t      &userID,
                                   const QString&    userPassword)
     {
@@ -81,7 +93,12 @@ public:
 
     static void debugUpdAccessToken(const size_t& senderID)
     {
-        Server::updAccessToken(senderID);
+        qDebug() << Server::updAccessToken(senderID);
+    }
+
+    static void debugGetIDFromAccessToken(const QString &accessToken)
+    {
+        qDebug() << Server::getIDFromAccessToken(accessToken);
     }
 
 public slots:
@@ -89,9 +106,16 @@ public slots:
     void slotReadClient();
 
 private:
+    QTcpServer *server;
+    static QMap<QString, size_t> tokens;
+    static QMap<QString, size_t> usernames;
+    static void loadTokensMap();
+    static void loadUsernamesMap();
+
     static const unsigned messagesBlockSize = 200;
     static const unsigned userLoginDataBlockSize = 200;
     static const unsigned accessTokenDataBlockSize = 200;
+    static const unsigned userChatMembershipBlockSize = 200;
     static const unsigned accessTokenLen = 100;
 
     enum apiErrorCode
@@ -113,6 +137,10 @@ private:
         NO_CHAT_PROPERTY,
         NO_CHAT_PROPERTY_VALUE,
         USER_ALREADY_IN_CHAT,
+        NO_MESSAGE_TEXT,
+        NO_CHAT_VISIBILITY,
+        NO_CHAT_NAME,
+        NO_CHAT_MEMBERS,
         UNKNOWN_ERROR
     };
 
@@ -125,16 +153,15 @@ private:
     static bool validateUser(const size_t&  userID,
                              const QString& userPassword);
     static size_t getIDFromAccessToken(const QString&);
-    static QString updAccessToken(const size_t& senderID);
+    static QJsonObject updAccessToken(const size_t& senderID);
     static QString generateAccessToken();
 
     static QString getUsernameByID(const size_t&);
-
-    QTcpServer *server;
+    static size_t getIDFromUsername(const QString&);
 
     static QString parseQuery(const QString&);
 
-    static void createChat(const QString&   chatName,
+    static QJsonObject createChat(const QString&   chatName,
                     const QJsonArray&       membersIDs,
                     const size_t&           adminID,
                     const bool&             isVisible);
@@ -174,6 +201,12 @@ private:
     static QJsonObject kickMember(const size_t& chatID,
                                   const size_t& senderID,
                                   const size_t& userToKickID);
+
+    static void addChatMembership(const size_t &userID,
+                                  const size_t &chatID);
+
+    static void deleteChatMembership(const size_t &userID,
+                                     const size_t &chatID);
 
     static QJsonObject callApiMethod(const QString&     method,
                                      const QJsonObject& params);
