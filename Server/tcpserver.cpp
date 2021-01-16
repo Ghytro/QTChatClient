@@ -1,6 +1,9 @@
 #include "tcpserver.h"
 #include "exceptions.h"
 
+QMap<QString, size_t> Server::tokens = QMap<QString, size_t>();
+QMap<QString, size_t> Server::usernames = QMap<QString, size_t>();
+
 Server::Server(quint16 port)
 {
     this->server = new QTcpServer;
@@ -12,12 +15,61 @@ Server::Server(quint16 port)
 
     connect(this->server, SIGNAL(newConnection()), this, SLOT(slotNewConnection()));
 
+    Server::loadTokensMap();
+    Server::loadUsernamesMap();
+
     qDebug() << "Server started";
 }
 
 Server::~Server()
 {
     this->server->deleteLater();
+}
+
+void Server::loadTokensMap()
+{
+    if (!QDir("dbase/access_tokens").exists())
+        return;
+    size_t sz = QDir("dbase/access_tokens").count() - 2;
+    for (size_t i = 0; i < sz; ++i)
+    {
+        QFile file(QStringLiteral("dbase/access_tokens/%1").arg(i));
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            qDebug() << "Unable to open tokens file for reading";
+            return;
+        }
+        while (!file.atEnd())
+        {
+            QString line = file.readLine();
+            QStringList pairOfValues = line.split(' ');
+            Server::tokens.insert(pairOfValues[1].left(pairOfValues[1].length() - 1), pairOfValues[0].toUInt());
+        }
+        file.close();
+    }
+}
+
+void Server::loadUsernamesMap()
+{
+    if (!QDir("dbase/userlogindata").exists())
+        return;
+    size_t sz = QDir("dbase/userlogindata").count() - 2;
+    for (size_t i = 0; i < sz; ++i)
+    {
+        QFile file(QStringLiteral("dbase/userlogindata/%1").arg(i));
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            qDebug() << "Unable to open tokens file for reading";
+            return;
+        }
+        while (!file.atEnd())
+        {
+            QString line = file.readLine();
+            QStringList values = line.split(' ');
+            Server::tokens.insert(values[1], values[0].toUInt());
+        }
+        file.close();
+    }
 }
 
 void Server::slotNewConnection()
@@ -72,9 +124,7 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
         if (apiErr != apiErrorCode::NULL_ERROR)
             return Server::generateErrorJson(apiErr);
 
-        QString newToken = Server::updAccessToken(params["user_id"].toInt());
-        QJsonObject response;
-        response.insert("new_token", newToken);
+        QJsonObject response = Server::updAccessToken(params["user_id"].toInt());
         return response;
     }
 
@@ -145,11 +195,11 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
             property = params["property"].toString();
             value = params["value"].toString();
             chatID = params["chat_id"].toInt();
-            QJsonObject chatInfo = Server::getChatInfo(chatID, senderID);
+            chatInfo = Server::getChatInfo(chatID, senderID);
             if (chatInfo[property] == QJsonValue::Undefined ||
-                chatInfo[property].toString() == "admin" ||
-                chatInfo[property].toString() == "members" ||
-                chatInfo[property].toString() == "total_messages")
+                property == "admin" ||
+                property == "members" ||
+                property == "total_messages")
                 apiErr = INCORRECT_VALUE;
         }
 
@@ -244,6 +294,44 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
         {
             return Server::generateErrorJson(USER_NOT_ADMIN);
         }
+    }
+
+    else if (method == "chat.sendmessage")
+    {
+        apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
+        if (params["chat_id"] == QJsonValue::Undefined)
+            apiErr = NO_CHAT_ID;
+        else if (params["chat_id"].toInt() < 0)
+            apiErr = INCORRECT_VALUE;
+        else if (params["text"] == QJsonValue::Undefined)
+            apiErr = NO_MESSAGE_TEXT;
+
+        if (apiErr != NULL_ERROR)
+            return Server::generateErrorJson(apiErr);
+
+        return Server::sendMessage(params["chat_id"].toInt(),
+                params["text"].toString(),
+                senderID);
+    }
+
+    else if (method == "chat.create")
+    {
+        apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
+        if (params["is_visible"] == QJsonValue::Undefined)
+            apiErr = NO_CHAT_VISIBILITY;
+        else if (params["name"] == QJsonValue::Undefined)
+            apiErr = NO_CHAT_NAME;
+        if (apiErr != NULL_ERROR)
+            return Server::generateErrorJson(apiErr);
+
+        QJsonArray members;
+        if (params["members"] != QJsonValue::Undefined)
+            members = params["members"].toArray();
+
+        return Server::createChat(params["name"].toString(),
+                                  members,
+                                  senderID,
+                                  params["is_visible"].toBool());
     }
 
     return Server::generateErrorJson(apiErrorCode::UNKNOWN_ERROR);
@@ -371,7 +459,8 @@ void Server::createUser(const QString &username, const QString &password)
         return counter;
     };
 
-    const QString pathToData = "dbase/userlogindata";
+    //filling userlogindata
+    QString pathToData = "dbase/userlogindata";
     QDir().mkdir("dbase");
     QDir().mkdir(pathToData);
     size_t totalFiles = QDir(pathToData).count() - 2;
@@ -386,56 +475,117 @@ void Server::createUser(const QString &username, const QString &password)
         QTextStream out(&dataFile);
         out << QStringLiteral("0 %1 %2").arg(username).arg(password) << Qt::endl;
         dataFile.close();
-        return;
     }
-    QFile dataFile(QStringLiteral("%1/%2").arg(pathToData).arg(totalFiles - 1));
-    size_t lines = countNumberOfLines(dataFile);
-    if (lines == Server::userLoginDataBlockSize)
+    else
     {
-        dataFile.setFileName(QStringLiteral("%1/%2").arg(pathToData).arg(totalFiles++));
-        lines = 0;
+        QFile dataFile(QStringLiteral("%1/%2").arg(pathToData).arg(totalFiles - 1));
+        size_t lines = countNumberOfLines(dataFile);
+        if (lines == Server::userLoginDataBlockSize)
+        {
+            dataFile.setFileName(QStringLiteral("%1/%2").arg(pathToData).arg(totalFiles++));
+            lines = 0;
+        }
+        if (!dataFile.open(QIODevice::Append))
+        {
+            qDebug() << "Unable to open dataFile for appending";
+            return;
+        }
+        size_t newUserID = (totalFiles - 1) * Server::userLoginDataBlockSize + lines;
+        Server::usernames.insert(username, newUserID);
+        QTextStream out(&dataFile);
+        out << QStringLiteral("%1 %2 %3").arg(newUserID).arg(username).arg(password) << Qt::endl;
+        dataFile.close();
     }
-    if (!dataFile.open(QIODevice::Append))
+
+    //filling chat membership
+    pathToData = "dbase/userchatmembership";
+    QDir().mkdir("dbase");
+    QDir().mkdir(pathToData);
+
+    totalFiles = QDir(pathToData).count() - 2;
+    if (totalFiles == 0)
     {
-        qDebug() << "Unable to open dataFile for appending";
-        return;
+        QFile dataFile(QStringLiteral("%1/%2").arg(pathToData).arg(totalFiles));
+        if (!dataFile.open(QIODevice::WriteOnly))
+        {
+            qDebug() << "Unable to open dbase/userchatmembership for writing";
+            return;
+        }
+        QJsonObject userMembership;
+        userMembership.insert("id", QJsonValue::fromVariant(0));
+        userMembership.insert("chats", QJsonValue::fromVariant(QJsonArray()));
+        QJsonArray arr;
+        arr.append(userMembership);
+        QJsonObject jsonObj;
+        jsonObj.insert("membership", QJsonValue::fromVariant(arr));
+        dataFile.write(QJsonDocument(jsonObj).toJson());
+        dataFile.close();
     }
-    size_t newUserID = (totalFiles - 1) * Server::userLoginDataBlockSize + lines;
-    QTextStream out(&dataFile);
-    out << QStringLiteral("%1 %2 %3").arg(newUserID).arg(username).arg(password) << Qt::endl;
-    return;
+    else
+    {
+        QFile dataFile(QStringLiteral("%1/%2").arg(pathToData).arg(totalFiles - 1));
+        if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            qDebug() << "Unable to open userchatmembership file for reading";
+            return;
+        }
+        QJsonObject jsonObj = QJsonDocument::fromJson(dataFile.readAll()).object();
+        dataFile.close();
+        QJsonArray arr = jsonObj["membership"].toArray();
+        size_t lines = arr.size();
+
+        if (lines == Server::userChatMembershipBlockSize)
+        {
+            dataFile.setFileName(QStringLiteral("%1/%2").arg(pathToData).arg(totalFiles));
+            if (!dataFile.open(QIODevice::WriteOnly))
+            {
+                qDebug() << "Unable to open dbase/userchatmembership for writing";
+                return;
+            }
+            size_t newUserID = (totalFiles - 1) * Server::userLoginDataBlockSize + lines;
+            QJsonObject userMembership;
+            userMembership.insert("id", QJsonValue::fromVariant(newUserID));
+            userMembership.insert("chats", QJsonValue::fromVariant(QJsonArray()));
+            QJsonArray arr;
+            arr.append(userMembership);
+            QJsonObject jsonObj;
+            jsonObj.insert("membership", QJsonValue::fromVariant(arr));
+            dataFile.write(QJsonDocument(jsonObj).toJson());
+            dataFile.close();
+        }
+        else
+        {
+            size_t newUserID = (totalFiles - 1) * Server::userLoginDataBlockSize + lines;
+            QJsonObject userMembership;
+            userMembership.insert("id", QJsonValue::fromVariant(newUserID));
+            userMembership.insert("chats", QJsonValue::fromVariant(QJsonArray()));
+            arr.append(userMembership);
+            jsonObj["membership"] = arr;
+            if (!dataFile.open(QIODevice::WriteOnly))
+            {
+                qDebug() << "Unable to open dbase/userchatmembership for writing";
+                return;
+            }
+            dataFile.write(QJsonDocument(jsonObj).toJson());
+            dataFile.close();
+        }
+    }
 }
 
 size_t Server::getIDFromAccessToken(const QString &accessToken)
 {
-    QDir().mkdir("dbase");
-    QFile in("dbase/access_tokens");
-    if (!in.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        in.close();
-        if (!in.open(QIODevice::WriteOnly))
-        {
-            qDebug() << "Unable to open access_tokens for writing";
-            return false;
-        }
-        in.close();
-        if (!in.open(QIODevice::ReadOnly | QIODevice::Text))
-        {
-            qDebug() << "Unable to open access_tokens for reading";
-            return false;
-        }
-    }
-    while (!in.atEnd())
-    {
-        QString line = in.readLine();
-        QStringList pairOfValues = line.split(' ');
+    if (Server::tokens.find(accessToken) == Server::tokens.end())
+        throw UserNotFoundException();
 
-        QString token = pairOfValues[1];
-        if (accessToken + "\n" == token)
-            return pairOfValues[0].toInt();
-    }
-    in.close();
-    throw TokenDoesNotExistException();
+    return Server::tokens[accessToken];
+}
+
+size_t Server::getIDFromUsername(const QString &username)
+{
+    if (Server::usernames.find(username) == Server::usernames.end())
+        throw UserNotFoundException();
+
+    return Server::usernames[username];
 }
 
 QString Server::generateAccessToken()
@@ -447,56 +597,69 @@ QString Server::generateAccessToken()
     return ans;
 }
 
-QString Server::updAccessToken(const size_t &senderID)
+QJsonObject Server::updAccessToken(const size_t &senderID)
 {
     QDir().mkdir("dbase");
-    QFile in("dbase/access_tokens");
-    if (!in.open(QIODevice::ReadOnly | QIODevice::Text))
+    QDir().mkdir("dbase/access_tokens");
+
+    size_t numOfFiles = QDir("dbase/access_tokens").count() - 2;
+    QString newAccessToken = Server::generateAccessToken();
+
+    size_t fileID = senderID / Server::accessTokenDataBlockSize;
+    QFile tokenFile(QStringLiteral("dbase/access_tokens/%1").arg(fileID));
+
+    if (fileID == numOfFiles) //condition to create new block
     {
-        in.close();
-        if (!in.open(QIODevice::WriteOnly))
+        if (!tokenFile.open(QIODevice::WriteOnly))
         {
-            qDebug() << "Unable to open access_tokens for writing";
-            return "";
+            qDebug() << "Unable to open token file for writing";
+            return Server::generateErrorJson(UNKNOWN_ERROR);
         }
-        in.close();
-        if (!in.open(QIODevice::ReadOnly | QIODevice::Text))
-        {
-            qDebug() << "Unable to open access_tokens for reading";
-            return "";
-        }
+        tokenFile.write(QStringLiteral("%1 %2\n").arg(senderID).arg(newAccessToken).toUtf8());
+        Server::tokens[newAccessToken] = senderID;
+        QJsonObject response;
+        response.insert("new_token", newAccessToken);
+        tokenFile.close();
+        return response;
     }
 
-    QStringList temp;
-    QString newAccessToken = Server::generateAccessToken();
-    bool isUpdated = false;
-    while (!in.atEnd())
+    QStringList updatedTokens;
+    if (!tokenFile.open(QIODevice::ReadOnly | QIODevice::Text))
     {
-        QString line = in.readLine();
+        qDebug() << "Unable to open token file for reading";
+        return Server::generateErrorJson(UNKNOWN_ERROR);
+    }
+    bool updated = false;
+    while (!tokenFile.atEnd())
+    {
+        QString line = tokenFile.readLine();
         QStringList pairOfValues = line.split(' ');
-        size_t id = pairOfValues[0].toInt();
-        if (id == senderID)
+        if (pairOfValues[0].toUInt() == senderID)
         {
-            isUpdated = true;
+            updated = true;
+            Server::tokens.remove(pairOfValues[1].left(pairOfValues[1].length() - 1));
+            Server::tokens.insert(newAccessToken, senderID);
             pairOfValues[1] = newAccessToken + "\n";
         }
-        temp.append(pairOfValues[0] + " " + pairOfValues[1]);
+        updatedTokens.append(pairOfValues[0] + " " + pairOfValues[1]);
     }
+    tokenFile.close();
 
-    if (!isUpdated)
-        temp.append(QStringLiteral("%1 %2\n").arg(senderID).arg(newAccessToken));
+    if (!updated)
+        updatedTokens.append(QStringLiteral("%1 %2\n").arg(senderID).arg(newAccessToken));
 
-    in.close();
-    if (!in.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    if (!tokenFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
     {
-        qDebug() << "Unable to open access_tokens for writing";
-        return "";
+        qDebug() << "Unable to open token file for writing";
+        return Server::generateErrorJson(UNKNOWN_ERROR);
     }
-    QTextStream out(&in);
-    for (QString i: temp)
+    QTextStream out(&tokenFile);
+    for (QString i: updatedTokens)
         out << i;
-    qDebug() << "User" << senderID << "token updated";
-    return newAccessToken;
+    QJsonObject response;
+    response.insert("new_token", newAccessToken);
+    tokenFile.close();
+    return response;
 }
 
 QString Server::getUsernameByID(const size_t &userID)
@@ -529,7 +692,7 @@ QString Server::parseQuery(const QString &query)
     return QJsonDocument(response).toJson();
 }
 
-void Server::createChat(const QString&             chatName,
+QJsonObject Server::createChat(const QString&             chatName,
                            const QJsonArray&       membersIDs,
                            const size_t&           adminID,
                            const bool&             isVisible)
@@ -539,7 +702,7 @@ void Server::createChat(const QString&             chatName,
     QDir("chats").mkdir(QString::number(chatID));
 
     QJsonObject json;
-    json.insert("chat_name",        QJsonValue::fromVariant(chatName));
+    json.insert("name",             QJsonValue::fromVariant(chatName));
     json.insert("members",          QJsonValue::fromVariant(membersIDs));
     json.insert("admin",            QJsonValue::fromVariant(adminID));
     json.insert("is_visible",       QJsonValue::fromVariant(isVisible));
@@ -547,9 +710,15 @@ void Server::createChat(const QString&             chatName,
 
     QJsonDocument jsonDoc(json);
     QFile infoFile(QStringLiteral("chats/%1/info.json").arg(chatID));
-    infoFile.open(QFile::WriteOnly);
+    if (!infoFile.open(QFile::WriteOnly))
+    {
+        qDebug() << "Unable to open chat info file for reading";
+        return Server::generateErrorJson(UNKNOWN_ERROR);
+    }
     infoFile.write(jsonDoc.toJson());
-    //qDebug() << "Chat successfully created";
+    QJsonObject response;
+    response.insert("chat_id", QJsonValue::fromVariant(chatID));
+    return response;
 }
 
 QJsonObject Server::sendMessage(const size_t&           chatID,
@@ -826,4 +995,78 @@ QJsonObject Server::kickMember(const size_t &chatID, const size_t &senderID, con
     infoFile.write(QJsonDocument(chatInfo).toJson());
     infoFile.close();
     return Server::generateErrorJson(NULL_ERROR);
+}
+
+void Server::addChatMembership(const size_t &userID, const size_t &chatID)
+{
+    size_t fileID = userID / Server::userChatMembershipBlockSize;
+    QFile membershipFile(QStringLiteral("dbase/userchatmembership/%1").arg(fileID));
+    if (!membershipFile.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        qDebug() << "Unable to open membership file for reading";
+        return;
+    }
+
+    QJsonObject jsonObj = QJsonDocument::fromJson(membershipFile.readAll()).object();
+    membershipFile.close();
+    QJsonArray memberships = jsonObj["membership"].toArray();
+    QJsonObject userData = memberships[userID % Server::userChatMembershipBlockSize].toObject();
+    QJsonArray chats = userData["chats"].toArray();
+
+    if (chats.contains(QJsonValue::fromVariant(chatID)))
+        throw UserIsAlreadyInChatException();
+
+    chats.append(QJsonValue::fromVariant(chatID));
+    userData["chats"] = chats;
+    memberships[userID % Server::userChatMembershipBlockSize] = userData;
+    jsonObj["membership"] = memberships;
+
+    if (!membershipFile.open(QIODevice::WriteOnly))
+    {
+        qDebug() << "Unable to open membership file for writing";
+        return;
+    }
+
+    membershipFile.write(QJsonDocument(jsonObj).toJson());
+    membershipFile.close();
+}
+
+void Server::deleteChatMembership(const size_t &userID, const size_t &chatID)
+{
+    size_t fileID = userID / Server::userChatMembershipBlockSize;
+    QFile membershipFile(QStringLiteral("dbase/userchatmembership/%1").arg(fileID));
+    if (!membershipFile.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        qDebug() << "Unable to open membership file for reading";
+        return;
+    }
+
+    QJsonObject jsonObj = QJsonDocument::fromJson(membershipFile.readAll()).object();
+    membershipFile.close();
+    QJsonArray memberships = jsonObj["membership"].toArray();
+    QJsonObject userData = memberships[userID % Server::userChatMembershipBlockSize].toObject();
+    QJsonArray chats = userData["chats"].toArray();
+
+    if (!chats.contains(QJsonValue::fromVariant(chatID)))
+        throw UserIsNotMemberOfChatException();
+
+    for (int i = 0; i < chats.size(); ++i)
+        if (chats[i] == QJsonValue::fromVariant(chatID))
+        {
+            chats.removeAt(i);
+            break;
+        }
+
+    userData["chats"] = chats;
+    memberships[userID % Server::userChatMembershipBlockSize] = userData;
+    jsonObj["membership"] = memberships;
+
+    if (!membershipFile.open(QIODevice::WriteOnly))
+    {
+        qDebug() << "Unable to open membership file for writing";
+        return;
+    }
+
+    membershipFile.write(QJsonDocument(jsonObj).toJson());
+    membershipFile.close();
 }
