@@ -18,6 +18,8 @@ Server::Server(quint16 port)
     Server::loadTokensMap();
     Server::loadUsernamesMap();
 
+    //qDebug() << Server::usernames;
+
     qDebug() << "Server started";
 }
 
@@ -66,7 +68,7 @@ void Server::loadUsernamesMap()
         {
             QString line = file.readLine();
             QStringList values = line.split(' ');
-            Server::tokens.insert(values[1], values[0].toUInt());
+            Server::usernames.insert(values[1], values[0].toUInt());
         }
         file.close();
     }
@@ -102,7 +104,7 @@ QJsonObject Server::generateErrorJson(const apiErrorCode &err)
 
 QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &params)
 {
-    //first of all checking if the user wants ot change access token
+    //first of all methods that dont need access tokens
     //for other queries access token is essential
     if (method == "access_token.change")
     {
@@ -126,6 +128,32 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
 
         QJsonObject response = Server::updAccessToken(params["user_id"].toInt());
         return response;
+    }
+    else if (method == "user.create")
+    {
+        apiErrorCode apiErr = NULL_ERROR;
+        if (params["username"] == QJsonValue::Undefined)
+            apiErr = NO_USERNAME;
+        else if (params["password"] == QJsonValue::Undefined)
+            apiErr = NO_USER_PASSWORD;
+        else
+        {
+            try
+            {
+                Server::getIDFromUsername(params["username"].toString());
+                apiErr = USER_ALREADY_EXISTS;
+            }
+            catch (const UserNotFoundException &e)
+            {
+                //qDebug() << "User doesnt exist";
+            }
+        }
+
+        if (apiErr != NULL_ERROR)
+            return Server::generateErrorJson(apiErr);
+
+        return Server::createUser(params["username"].toString(),
+                                  params["password"].toString());
     }
 
     if (params["access_token"] == QJsonValue::Undefined)
@@ -409,8 +437,16 @@ QString Server::apiErrorCodeDesc(const apiErrorCode &err)
         return "No new value of a property";
         break;
 
-    default:
+   case USER_ALREADY_EXISTS:
+        return "User already exists";
+        break;
+
+   case UNKNOWN_ERROR:
         return "Unknown error";
+        break;
+
+    default:
+        return "No error description";
         break;
     }
 }
@@ -440,7 +476,7 @@ bool Server::validateUser(const size_t &userID, const QString &userPassword)
     return false;
 }
 
-void Server::createUser(const QString &username, const QString &password)
+QJsonObject Server::createUser(const QString &username, const QString &password)
 {
     auto countNumberOfLines = [](QFile &file) //though its reference function doesnt write anything to file
     {
@@ -458,6 +494,7 @@ void Server::createUser(const QString &username, const QString &password)
         file.close();
         return counter;
     };
+    QJsonObject response;
 
     //filling userlogindata
     QString pathToData = "dbase/userlogindata";
@@ -470,8 +507,10 @@ void Server::createUser(const QString &username, const QString &password)
         if (!dataFile.open(QIODevice::WriteOnly))
         {
             qDebug() << "Unable to open dbase/userlogindata for writing";
-            return;
+            return Server::generateErrorJson(UNKNOWN_ERROR);
         }
+        response.insert("id", QJsonValue::fromVariant(0));
+        Server::usernames.insert(username, 0);
         QTextStream out(&dataFile);
         out << QStringLiteral("0 %1 %2").arg(username).arg(password) << Qt::endl;
         dataFile.close();
@@ -488,9 +527,10 @@ void Server::createUser(const QString &username, const QString &password)
         if (!dataFile.open(QIODevice::Append))
         {
             qDebug() << "Unable to open dataFile for appending";
-            return;
+            return Server::generateErrorJson(UNKNOWN_ERROR);
         }
         size_t newUserID = (totalFiles - 1) * Server::userLoginDataBlockSize + lines;
+        response.insert("id", QJsonValue::fromVariant(newUserID));
         Server::usernames.insert(username, newUserID);
         QTextStream out(&dataFile);
         out << QStringLiteral("%1 %2 %3").arg(newUserID).arg(username).arg(password) << Qt::endl;
@@ -509,7 +549,7 @@ void Server::createUser(const QString &username, const QString &password)
         if (!dataFile.open(QIODevice::WriteOnly))
         {
             qDebug() << "Unable to open dbase/userchatmembership for writing";
-            return;
+            return Server::generateErrorJson(UNKNOWN_ERROR);
         }
         QJsonObject userMembership;
         userMembership.insert("id", QJsonValue::fromVariant(0));
@@ -527,7 +567,7 @@ void Server::createUser(const QString &username, const QString &password)
         if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text))
         {
             qDebug() << "Unable to open userchatmembership file for reading";
-            return;
+            return Server::generateErrorJson(UNKNOWN_ERROR);
         }
         QJsonObject jsonObj = QJsonDocument::fromJson(dataFile.readAll()).object();
         dataFile.close();
@@ -540,7 +580,7 @@ void Server::createUser(const QString &username, const QString &password)
             if (!dataFile.open(QIODevice::WriteOnly))
             {
                 qDebug() << "Unable to open dbase/userchatmembership for writing";
-                return;
+                return Server::generateErrorJson(UNKNOWN_ERROR);
             }
             size_t newUserID = (totalFiles - 1) * Server::userLoginDataBlockSize + lines;
             QJsonObject userMembership;
@@ -564,12 +604,13 @@ void Server::createUser(const QString &username, const QString &password)
             if (!dataFile.open(QIODevice::WriteOnly))
             {
                 qDebug() << "Unable to open dbase/userchatmembership for writing";
-                return;
+                return Server::generateErrorJson(UNKNOWN_ERROR);
             }
             dataFile.write(QJsonDocument(jsonObj).toJson());
             dataFile.close();
         }
     }
+    return response;
 }
 
 size_t Server::getIDFromAccessToken(const QString &accessToken)
