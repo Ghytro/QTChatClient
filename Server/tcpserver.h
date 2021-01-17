@@ -127,9 +127,11 @@ private:
         INCORRECT_VALUE,
         TOKEN_VALIDATION_FAILURE,
         NO_USER_ID,
+        NO_USERNAME,
         NO_USER_PASSWORD,
         USER_VALIDATION_FAILURE,
         USER_DOES_NOT_EXIST,
+        USER_ALREADY_EXISTS,
         CHAT_DOESNT_EXIST,
         CHAT_IS_NOT_VISIBLE,
         USER_NOT_ADMIN,
@@ -144,7 +146,7 @@ private:
         UNKNOWN_ERROR
     };
 
-    static void createUser(const QString &username,
+    static QJsonObject createUser(const QString &username,
                            const QString &password);
 
     static QString apiErrorCodeDesc(const apiErrorCode&);
