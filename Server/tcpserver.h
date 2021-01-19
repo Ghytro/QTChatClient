@@ -210,6 +210,8 @@ private:
     static void deleteChatMembership(const size_t &userID,
                                      const size_t &chatID);
 
+    static QJsonArray getChatMembership(const size_t &userID);
+
     static QJsonObject callApiMethod(const QString&     method,
                                      const QJsonObject& params);
 
