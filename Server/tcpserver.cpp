@@ -90,7 +90,8 @@ void Server::slotReadClient()
         clientSocket->write("Query is too big");
         return;
     }
-    QString reply = Server::parseQuery(clientSocket->readAll());
+    QByteArray data = clientSocket->readAll();
+    QString reply = Server::parseQuery(data);
     clientSocket->write(reply.toUtf8());
 }
 
@@ -108,33 +109,41 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     //for other queries access token is essential
     if (method == "access_token.change")
     {
+        size_t userID;
+        try
+        {
+            userID = Server::getIDFromUsername(params["username"].toString());
+        }
+        catch (const UserNotFoundException &e)
+        {
+            return Server::generateErrorJson(USER_VALIDATION_FAILURE);
+        }
+
+        //qDebug() << userID;
         apiErrorCode apiErr = NULL_ERROR;
 
-        if (params["user_id"] == QJsonValue::Undefined)
+        if (params["username"] == QJsonValue::Null)
             apiErr = NO_USER_ID;
 
-        else if (params["password"] == QJsonValue::Undefined)
+        else if (params["password"] == QJsonValue::Null)
             apiErr = NO_USER_PASSWORD;
 
-        else if (params["user_id"].toInt() < 0)
-            apiErr = INCORRECT_VALUE;
-
-        else if (!Server::validateUser(params["user_id"].toInt(),
+        else if (!Server::validateUser(userID,
                                        params["password"].toString()))
             apiErr = USER_VALIDATION_FAILURE;
 
         if (apiErr != apiErrorCode::NULL_ERROR)
             return Server::generateErrorJson(apiErr);
 
-        QJsonObject response = Server::updAccessToken(params["user_id"].toInt());
+        QJsonObject response = Server::updAccessToken(userID);
         return response;
     }
     else if (method == "user.create")
     {
         apiErrorCode apiErr = NULL_ERROR;
-        if (params["username"] == QJsonValue::Undefined)
+        if (params["username"] == QJsonValue::Null)
             apiErr = NO_USERNAME;
-        else if (params["password"] == QJsonValue::Undefined)
+        else if (params["password"] == QJsonValue::Null)
             apiErr = NO_USER_PASSWORD;
         else
         {
@@ -156,7 +165,7 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
                                   params["password"].toString());
     }
 
-    if (params["access_token"] == QJsonValue::Undefined)
+    if (params["access_token"] == QJsonValue::Null)
         return Server::generateErrorJson(apiErrorCode::NO_ACCESS_TOKEN);
 
     if (params["access_token"].toString().length() != Server::accessTokenLen)
@@ -172,11 +181,18 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
         return Server::generateErrorJson(apiErrorCode::TOKEN_VALIDATION_FAILURE);
     }
 
-    if (method == "chat.get")
+    if (method == "user.getmyinfo")
+    {
+        QJsonObject response;
+        response.insert("username", QJsonValue::fromVariant(Server::getUsernameByID(senderID)));
+        response.insert("chat_membership", QJsonValue::fromVariant(Server::getChatMembership(senderID)));
+        return response;
+    }
+    else if (method == "chat.get")
     {
         apiErrorCode apiErr = NULL_ERROR;
 
-        if (params["chat_id"] == QJsonValue::Undefined)
+        if (params["chat_id"] == QJsonValue::Null)
             apiErr = NO_CHAT_ID;
 
         else if (params["chat_id"].toInt() < 0)
@@ -207,16 +223,16 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
         QJsonObject chatInfo;
         size_t chatID;
 
-        if (params["chat_id"] == QJsonValue::Undefined)
+        if (params["chat_id"] == QJsonValue::Null)
             apiErr = NO_CHAT_ID;
 
         else if (params["chat_id"].toInt() < 0)
             apiErr = INCORRECT_VALUE;
 
-        else if (params["property"] == QJsonValue::Undefined)
+        else if (params["property"] == QJsonValue::Null)
             apiErr = NO_CHAT_PROPERTY;
 
-        else if (params["value"] == QJsonValue::Undefined)
+        else if (params["value"] == QJsonValue::Null)
             apiErr = NO_CHAT_PROPERTY_VALUE;
         else
         {
@@ -224,7 +240,7 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
             value = params["value"].toString();
             chatID = params["chat_id"].toInt();
             chatInfo = Server::getChatInfo(chatID, senderID);
-            if (chatInfo[property] == QJsonValue::Undefined ||
+            if (chatInfo[property] == QJsonValue::Null ||
                 property == "admin" ||
                 property == "members" ||
                 property == "total_messages")
@@ -252,10 +268,10 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     {
         apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
 
-        if (params["chat_id"] == QJsonValue::Undefined)
+        if (params["chat_id"] == QJsonValue::Null)
             apiErr = NO_CHAT_ID;
 
-        else if (params["user_id"] == QJsonValue::Undefined)
+        else if (params["user_id"] == QJsonValue::Null)
             apiErr = NO_USER_ID;
 
         else if (params["user_id"].toInt() < 0 ||
@@ -292,10 +308,10 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     {
         apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
 
-        if (params["chat_id"] == QJsonValue::Undefined)
+        if (params["chat_id"] == QJsonValue::Null)
             apiErr = NO_CHAT_ID;
 
-        else if (params["user_id"] == QJsonValue::Undefined)
+        else if (params["user_id"] == QJsonValue::Null)
             apiErr = NO_USER_ID;
 
         else if (params["user_id"].toInt() < 0 ||
@@ -327,11 +343,11 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     else if (method == "chat.sendmessage")
     {
         apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
-        if (params["chat_id"] == QJsonValue::Undefined)
+        if (params["chat_id"] == QJsonValue::Null)
             apiErr = NO_CHAT_ID;
         else if (params["chat_id"].toInt() < 0)
             apiErr = INCORRECT_VALUE;
-        else if (params["text"] == QJsonValue::Undefined)
+        else if (params["text"] == QJsonValue::Null)
             apiErr = NO_MESSAGE_TEXT;
 
         if (apiErr != NULL_ERROR)
@@ -345,15 +361,15 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     else if (method == "chat.create")
     {
         apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
-        if (params["is_visible"] == QJsonValue::Undefined)
+        if (params["is_visible"] == QJsonValue::Null)
             apiErr = NO_CHAT_VISIBILITY;
-        else if (params["name"] == QJsonValue::Undefined)
+        else if (params["name"] == QJsonValue::Null)
             apiErr = NO_CHAT_NAME;
         if (apiErr != NULL_ERROR)
             return Server::generateErrorJson(apiErr);
 
         QJsonArray members;
-        if (params["members"] != QJsonValue::Undefined)
+        if (params["members"] != QJsonValue::Null)
             members = params["members"].toArray();
 
         return Server::createChat(params["name"].toString(),
@@ -494,7 +510,7 @@ QJsonObject Server::createUser(const QString &username, const QString &password)
         file.close();
         return counter;
     };
-    QJsonObject response;
+    QString newUserAccessToken;
 
     //filling userlogindata
     QString pathToData = "dbase/userlogindata";
@@ -509,8 +525,8 @@ QJsonObject Server::createUser(const QString &username, const QString &password)
             qDebug() << "Unable to open dbase/userlogindata for writing";
             return Server::generateErrorJson(UNKNOWN_ERROR);
         }
-        response.insert("id", QJsonValue::fromVariant(0));
         Server::usernames.insert(username, 0);
+        newUserAccessToken = Server::updAccessToken(0)["new_token"].toString();
         QTextStream out(&dataFile);
         out << QStringLiteral("0 %1 %2").arg(username).arg(password) << Qt::endl;
         dataFile.close();
@@ -530,7 +546,7 @@ QJsonObject Server::createUser(const QString &username, const QString &password)
             return Server::generateErrorJson(UNKNOWN_ERROR);
         }
         size_t newUserID = (totalFiles - 1) * Server::userLoginDataBlockSize + lines;
-        response.insert("id", QJsonValue::fromVariant(newUserID));
+        newUserAccessToken = Server::updAccessToken(newUserID)["new_token"].toString();
         Server::usernames.insert(username, newUserID);
         QTextStream out(&dataFile);
         out << QStringLiteral("%1 %2 %3").arg(newUserID).arg(username).arg(password) << Qt::endl;
@@ -610,6 +626,10 @@ QJsonObject Server::createUser(const QString &username, const QString &password)
             dataFile.close();
         }
     }
+
+    //in response we store only access token
+    QJsonObject response;
+    response.insert("new_token", QJsonValue::fromVariant(newUserAccessToken));
     return response;
 }
 
@@ -700,6 +720,7 @@ QJsonObject Server::updAccessToken(const size_t &senderID)
     QJsonObject response;
     response.insert("new_token", newAccessToken);
     tokenFile.close();
+    //qDebug() << response;
     return response;
 }
 
@@ -1110,4 +1131,22 @@ void Server::deleteChatMembership(const size_t &userID, const size_t &chatID)
 
     membershipFile.write(QJsonDocument(jsonObj).toJson());
     membershipFile.close();
+}
+
+QJsonArray Server::getChatMembership(const size_t &userID)
+{
+    size_t fileID = userID / Server::userChatMembershipBlockSize;
+    QFile membershipFile(QStringLiteral("dbase/userchatmembership/%1").arg(fileID));
+    if (!membershipFile.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        qDebug() << "Unable to open membership file for reading";
+        return {};
+    }
+
+    QJsonObject jsonObj = QJsonDocument::fromJson(membershipFile.readAll()).object();
+    membershipFile.close();
+    QJsonArray memberships = jsonObj["membership"].toArray();
+    QJsonObject userData = memberships[userID % Server::userChatMembershipBlockSize].toObject();
+    QJsonArray chats = userData["chats"].toArray();
+    return chats;
 }
