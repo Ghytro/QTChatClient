@@ -358,6 +358,39 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
                 senderID);
     }
 
+    else if (method == "chat.getlastmessages")
+    {
+        apiErrorCode apiErr = NULL_ERROR;
+
+        if (params["chat_id"] == QJsonValue::Null)
+            apiErr = NO_CHAT_ID;
+        else if (params["num"] == QJsonValue::Null)
+            apiErr = NO_LAST_MESSAGES_NUM;
+
+        if (apiErr != NULL_ERROR)
+            return Server::generateErrorJson(apiErr);
+
+        try
+        {
+            QJsonObject response;
+
+            response.insert("chat_id",
+                            params["chat_id"].toInt());
+
+            response.insert("newest_messages",
+                            Server::getNewestMessages(
+                                params["chat_id"].toInt(),
+                                senderID,
+                                params["num"].toInt())
+                           );
+            return response;
+        }
+        catch (const UserIsNotMemberOfChatException &e)
+        {
+            return Server::generateErrorJson(USER_NOT_IN_CHAT);
+        }
+    }
+
     else if (method == "chat.create")
     {
         apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
@@ -807,7 +840,7 @@ QJsonObject Server::sendMessage(const size_t&           chatID,
     infoFile.close();
 
     size_t totalMessages = jsonObj["total_messages"].toInt(),
-           firstMessageInBlockID = totalMessages - (totalMessages % Server::messagesBlockSize);
+           fileID = totalMessages / Server::messagesBlockSize;
 
     jsonObj["total_messages"] = QJsonValue::fromVariant(totalMessages + 1);
 
@@ -822,7 +855,7 @@ QJsonObject Server::sendMessage(const size_t&           chatID,
     infoFile.close();
 
     //putting a message into a file
-    QFile messagesFile(QStringLiteral("chats/%1/%2.json").arg(chatID).arg(firstMessageInBlockID));
+    QFile messagesFile(QStringLiteral("chats/%1/%2.json").arg(chatID).arg(fileID));
     if (!messagesFile.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         if (!messagesFile.open(QIODevice::WriteOnly))
@@ -1148,5 +1181,43 @@ QJsonArray Server::getChatMembership(const size_t &userID)
     QJsonArray memberships = jsonObj["membership"].toArray();
     QJsonObject userData = memberships[userID % Server::userChatMembershipBlockSize].toObject();
     QJsonArray chats = userData["chats"].toArray();
-    return chats;
+    QJsonArray response;
+    for (QJsonValue i: chats)
+    {
+        QJsonValue chatName = Server::getChatInfo(i.toInt(), userID)["name"];
+
+        QJsonObject obj;
+        obj.insert("id", i);
+        obj.insert("name", chatName);
+        response.append(obj);
+    }
+    return response;
+}
+
+QJsonArray Server::getNewestMessages(const size_t &chatID,
+                                     const size_t &querySenderID,
+                                     int          messagesNum)
+{
+    if (messagesNum <= 0)
+        return {};
+
+    if (!Server::isMemberOfChat(querySenderID, chatID))
+        throw UserIsNotMemberOfChatException();
+
+    int fileNum = QDir(QStringLiteral("chats/%1").arg(chatID)).count() - 4;
+    QJsonArray response;
+    for (; messagesNum > 0 && fileNum >= 0; --fileNum)
+    {
+        QFile messageFile(QStringLiteral("chats/%1/%2.json").arg(chatID).arg(fileNum));
+        if (!messageFile.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            qDebug() << "Unable to open message file for reading";
+            return {};
+        }
+        QJsonArray messages = QJsonDocument::fromJson(messageFile.readAll()).object()["messages"].toArray();
+        messageFile.close();
+        for (int i = messages.size() - 1; messagesNum > 0 && i >= 0; --messagesNum, --i)
+            response.prepend(messages[i]);
+    }
+    return response;
 }
