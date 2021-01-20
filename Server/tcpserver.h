@@ -129,6 +129,7 @@ private:
         NO_USER_ID,
         NO_USERNAME,
         NO_USER_PASSWORD,
+        NO_LAST_MESSAGES_NUM,
         USER_VALIDATION_FAILURE,
         USER_DOES_NOT_EXIST,
         USER_ALREADY_EXISTS,
@@ -188,6 +189,10 @@ private:
 
     static QJsonArray getLastBlockOfMessages(const size_t &chatID,
                                              const size_t &querySenderID);
+
+    static QJsonArray getNewestMessages(const size_t &chatID,
+                                        const size_t &querySenderID,
+                                        int          messagesNum);
 
     static QJsonObject getChatInfo(const size_t &chatID,
                                    const size_t &senderID);
