@@ -122,10 +122,10 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
         //qDebug() << userID;
         apiErrorCode apiErr = NULL_ERROR;
 
-        if (params["username"] == QJsonValue::Null)
+        if (params["username"] == QJsonValue::Undefined)
             apiErr = NO_USER_ID;
 
-        else if (params["password"] == QJsonValue::Null)
+        else if (params["password"] == QJsonValue::Undefined)
             apiErr = NO_USER_PASSWORD;
 
         else if (!Server::validateUser(userID,
@@ -141,9 +141,9 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     else if (method == "user.create")
     {
         apiErrorCode apiErr = NULL_ERROR;
-        if (params["username"] == QJsonValue::Null)
+        if (params["username"] == QJsonValue::Undefined)
             apiErr = NO_USERNAME;
-        else if (params["password"] == QJsonValue::Null)
+        else if (params["password"] == QJsonValue::Undefined)
             apiErr = NO_USER_PASSWORD;
         else
         {
@@ -165,11 +165,11 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
                                   params["password"].toString());
     }
 
-    if (params["access_token"] == QJsonValue::Null)
+    if (params["access_token"] == QJsonValue::Undefined)
         return Server::generateErrorJson(apiErrorCode::NO_ACCESS_TOKEN);
 
     if (params["access_token"].toString().length() != Server::accessTokenLen)
-        return Server::generateErrorJson(apiErrorCode::INCORRECT_VALUE);
+        return Server::generateErrorJson(apiErrorCode::TOKEN_VALIDATION_FAILURE);
 
     size_t senderID;
     try
@@ -183,16 +183,46 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
 
     if (method == "user.getmyinfo")
     {
-        QJsonObject response;
-        response.insert("username", QJsonValue::fromVariant(Server::getUsernameByID(senderID)));
-        response.insert("chat_membership", QJsonValue::fromVariant(Server::getChatMembership(senderID)));
-        return response;
+        try
+        {
+            if (params["current_chat_id"] == QJsonValue::Undefined)
+                return Server::generateErrorJson(NO_CHAT_ID);
+
+            if (params["messages_num"] == QJsonValue::Undefined)
+                return Server::generateErrorJson(NO_LAST_MESSAGES_NUM);
+
+            QJsonObject response;
+            response.insert("username", QJsonValue::fromVariant(Server::getUsernameByID(senderID)));
+            response.insert("chat_membership", QJsonValue::fromVariant(Server::getChatMembership(senderID)));
+            if (params["current_chat_id"].toInt() >= 0)
+            {
+                QJsonObject newestMessages;
+                newestMessages.insert("chat_id", params["current_chat_id"].toInt());
+                newestMessages.insert("messages", QJsonValue::fromVariant(Server::getNewestMessages(params["current_chat_id"].toInt(),
+                                                                          senderID,
+                                                                          params["messages_num"].toInt())));
+                response.insert("newest_messages", newestMessages);
+            }
+            if (params["message_to_send"] != QJsonValue::Undefined)
+            {
+                Server::sendMessage(
+                            params["message_to_send"].toObject()["chat_id"].toInt(),
+                            params["message_to_send"].toObject()["text"].toString(),
+                            senderID);
+                qDebug() << "sent message";
+            }
+            return response;
+        }
+        catch (const UserNotFoundException &e)
+        {
+            return Server::generateErrorJson(USER_DOES_NOT_EXIST);
+        }
     }
     else if (method == "chat.get")
     {
         apiErrorCode apiErr = NULL_ERROR;
 
-        if (params["chat_id"] == QJsonValue::Null)
+        if (params["chat_id"] == QJsonValue::Undefined)
             apiErr = NO_CHAT_ID;
 
         else if (params["chat_id"].toInt() < 0)
@@ -223,16 +253,16 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
         QJsonObject chatInfo;
         size_t chatID;
 
-        if (params["chat_id"] == QJsonValue::Null)
+        if (params["chat_id"] == QJsonValue::Undefined)
             apiErr = NO_CHAT_ID;
 
         else if (params["chat_id"].toInt() < 0)
             apiErr = INCORRECT_VALUE;
 
-        else if (params["property"] == QJsonValue::Null)
+        else if (params["property"] == QJsonValue::Undefined)
             apiErr = NO_CHAT_PROPERTY;
 
-        else if (params["value"] == QJsonValue::Null)
+        else if (params["value"] == QJsonValue::Undefined)
             apiErr = NO_CHAT_PROPERTY_VALUE;
         else
         {
@@ -240,7 +270,7 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
             value = params["value"].toString();
             chatID = params["chat_id"].toInt();
             chatInfo = Server::getChatInfo(chatID, senderID);
-            if (chatInfo[property] == QJsonValue::Null ||
+            if (chatInfo[property] == QJsonValue::Undefined ||
                 property == "admin" ||
                 property == "members" ||
                 property == "total_messages")
@@ -268,10 +298,10 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     {
         apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
 
-        if (params["chat_id"] == QJsonValue::Null)
+        if (params["chat_id"] == QJsonValue::Undefined)
             apiErr = NO_CHAT_ID;
 
-        else if (params["user_id"] == QJsonValue::Null)
+        else if (params["user_id"] == QJsonValue::Undefined)
             apiErr = NO_USER_ID;
 
         else if (params["user_id"].toInt() < 0 ||
@@ -308,10 +338,10 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     {
         apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
 
-        if (params["chat_id"] == QJsonValue::Null)
+        if (params["chat_id"] == QJsonValue::Undefined)
             apiErr = NO_CHAT_ID;
 
-        else if (params["user_id"] == QJsonValue::Null)
+        else if (params["user_id"] == QJsonValue::Undefined)
             apiErr = NO_USER_ID;
 
         else if (params["user_id"].toInt() < 0 ||
@@ -343,11 +373,11 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     else if (method == "chat.sendmessage")
     {
         apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
-        if (params["chat_id"] == QJsonValue::Null)
+        if (params["chat_id"] == QJsonValue::Undefined)
             apiErr = NO_CHAT_ID;
         else if (params["chat_id"].toInt() < 0)
             apiErr = INCORRECT_VALUE;
-        else if (params["text"] == QJsonValue::Null)
+        else if (params["text"] == QJsonValue::Undefined)
             apiErr = NO_MESSAGE_TEXT;
 
         if (apiErr != NULL_ERROR)
@@ -362,9 +392,9 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     {
         apiErrorCode apiErr = NULL_ERROR;
 
-        if (params["chat_id"] == QJsonValue::Null)
+        if (params["chat_id"] == QJsonValue::Undefined)
             apiErr = NO_CHAT_ID;
-        else if (params["num"] == QJsonValue::Null)
+        else if (params["num"] == QJsonValue::Undefined)
             apiErr = NO_LAST_MESSAGES_NUM;
 
         if (apiErr != NULL_ERROR)
@@ -394,15 +424,15 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     else if (method == "chat.create")
     {
         apiErrorCode apiErr = apiErrorCode::NULL_ERROR;
-        if (params["is_visible"] == QJsonValue::Null)
+        if (params["is_visible"] == QJsonValue::Undefined)
             apiErr = NO_CHAT_VISIBILITY;
-        else if (params["name"] == QJsonValue::Null)
+        else if (params["name"] == QJsonValue::Undefined)
             apiErr = NO_CHAT_NAME;
         if (apiErr != NULL_ERROR)
             return Server::generateErrorJson(apiErr);
 
         QJsonArray members;
-        if (params["members"] != QJsonValue::Null)
+        if (params["members"] != QJsonValue::Undefined)
             members = params["members"].toArray();
 
         return Server::createChat(params["name"].toString(),
@@ -889,10 +919,11 @@ QJsonObject Server::sendMessage(const size_t&           chatID,
     }
     else
     {
-        jsonMessage.insert("id",        QJsonValue::fromVariant(totalMessages));
-        jsonMessage.insert("text",      QJsonValue::fromVariant(messageText));
-        jsonMessage.insert("sender_id", QJsonValue::fromVariant(senderID));
-        jsonMessage.insert("date",      QJsonValue::fromVariant(formattedDateTime));
+        jsonMessage.insert("id",              QJsonValue::fromVariant(totalMessages));
+        jsonMessage.insert("text",            QJsonValue::fromVariant(messageText));
+        jsonMessage.insert("sender_id",       QJsonValue::fromVariant(senderID));
+        jsonMessage.insert("sender_username", QJsonValue::fromVariant(Server::getUsernameByID(senderID)));
+        jsonMessage.insert("date",            QJsonValue::fromVariant(formattedDateTime));
     }
 
     messagesArr.append(jsonMessage);
