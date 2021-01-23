@@ -41,6 +41,7 @@ signals:
     void stopClientManager();
     void startClientManager();
     void sendMessage(QString);
+    void setCurrentChatID(int);
 };
 
 #endif // CHATWINDOW_H

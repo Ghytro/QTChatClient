@@ -1,7 +1,12 @@
 #ifndef ASYNCCLIENTMANAGER_H
 #define ASYNCCLIENTMANAGER_H
 
-#include "asyncclient.h"
+#include <QtCore>
+#include <QTcpSocket>
+#include <QTcpServer>
+
+class AsyncClient;
+
 class AsyncClientManager: public QObject
 {
     Q_OBJECT
@@ -12,7 +17,7 @@ public:
 public slots:
     void start();
     void stop();
-    void setCurrentChatID(int);
+    void slotSetCurrentChatID(int);
     void addPendingMessage(QString);
 
 signals:

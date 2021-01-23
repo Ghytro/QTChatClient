@@ -1,4 +1,5 @@
 #include "asyncclient.h"
+#include "asyncclientmanager.h"
 
 AsyncClient::AsyncClient(const quint16 &hostPort)
 {
@@ -13,13 +14,16 @@ AsyncClient::AsyncClient(const quint16 &hostPort)
 
     connect(this->socket, SIGNAL(connected()),
             this,         SLOT(slotConnected()));
-
-    this->socket->connectToHost(QHostAddress::LocalHost, this->hostPort);
 }
 
 AsyncClient::~AsyncClient()
 {
     this->socket->deleteLater();
+}
+
+void AsyncClient::setManager(AsyncClientManager *manager)
+{
+    this->manager = manager;
 }
 
 void AsyncClient::slotConnected()
@@ -40,17 +44,19 @@ void AsyncClient::slotError(QAbstractSocket::SocketError err)
 
     qDebug() << err;
     this->socket->close();
-    this->socket->connectToHost(QHostAddress::LocalHost, this->hostPort);
 }
 
 void AsyncClient::sendData(QByteArray data)
 {
+    this->socket->connectToHost(QHostAddress("192.168.50.19"), this->hostPort);
+    this->socket->waitForConnected();
     this->socket->write(data);
 }
 
 void AsyncClient::slotReadyRead()
 {
     QByteArray data = this->socket->readAll();
+    this->socket->close();
     QJsonObject response = QJsonDocument::fromJson(data).object();
     if (response["username"] != QJsonValue::Undefined)
         emit updUsername("You're logged in as "+response["username"].toString());
@@ -59,4 +65,5 @@ void AsyncClient::slotReadyRead()
     if (response["newest_messages"] != QJsonValue::Undefined)
         emit updNewestMessages(response["newest_messages"].toObject()["chat_id"].toInt(),
                                response["newest_messages"].toObject()["messages"].toArray());
+    emit gotReply();
 }

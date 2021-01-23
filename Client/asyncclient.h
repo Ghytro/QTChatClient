@@ -4,11 +4,15 @@
 #include <QtCore>
 #include <QTcpSocket>
 #include <QTcpServer>
+
+class AsyncClientManager;
+
 class AsyncClient: public QObject
 {
     Q_OBJECT
 public:
     explicit AsyncClient(const quint16 &hostPort);
+    void setManager(AsyncClientManager*);
     virtual ~AsyncClient();
 
 public slots:
@@ -24,9 +28,11 @@ signals:
     void updChatList(QJsonArray);
     void updNewestMessages(size_t chatID,
                            QJsonArray messages);
+    void gotReply();
 
 private:
     QTcpSocket *socket;
+    AsyncClientManager *manager;
     quint16 hostPort;
     enum apiErrorCode
     {

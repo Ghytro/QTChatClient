@@ -80,6 +80,6 @@ void Client::slotReadyRead()
 
 void Client::sendData(const QByteArray &data)
 {
-    this->socket->connectToHost(QHostAddress::LocalHost, this->hostPort);
+    this->socket->connectToHost(QHostAddress("192.168.50.19"), this->hostPort);
     this->socket->write(data);
 }

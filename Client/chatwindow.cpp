@@ -36,6 +36,9 @@ ChatWindow::ChatWindow(QWidget *parent) :
     connect(this,          SIGNAL(stopClientManager()),
             clientManager, SLOT(stop()));
 
+    connect(this,          SIGNAL(setCurrentChatID(int)),
+            clientManager, SLOT(slotSetCurrentChatID(int)));
+
     connect(clientManager, SIGNAL(stopped()),
             clientManager, SLOT(deleteLater()));
 
@@ -60,6 +63,8 @@ void ChatWindow::slotUpdChatList(QJsonArray arr)
 {
     if (arr == this->chats)
         return;
+
+    qDebug() << "ChatList updated";
 
     this->chats = arr;
     this->ui->listWidgetChats->clear();
@@ -86,7 +91,7 @@ void ChatWindow::openChat(QListWidgetItem *current, QListWidgetItem *previous)
     this->ui->lineEditMessage->setEnabled(true);
 
     this->messagesInChats[chatID] = QJsonArray();
-    this->clientManager->setCurrentChatID(chatID);
+    emit setCurrentChatID(chatID);
 }
 
 void ChatWindow::slotUpdNewestMessages(size_t chatID, QJsonArray latestMessages)
