@@ -58,11 +58,11 @@ void AsyncClient::slotReadyRead()
     QByteArray data = this->socket->readAll();
     this->socket->close();
     QJsonObject response = QJsonDocument::fromJson(data).object();
-    if (response["username"] != QJsonValue::Undefined)
+    if (response.contains("username"))
         emit updUsername("You're logged in as "+response["username"].toString());
-    if (response["chat_membership"] != QJsonValue::Undefined)
+    if (response.contains("chat_membership"))
         emit updChatList(response["chat_membership"].toArray());
-    if (response["newest_messages"] != QJsonValue::Undefined)
+    if (response.contains("newest_messages"))
         emit updNewestMessages(response["newest_messages"].toObject()["chat_id"].toInt(),
                                response["newest_messages"].toObject()["messages"].toArray());
     emit gotReply();
