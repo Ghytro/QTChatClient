@@ -57,6 +57,8 @@ void AsyncClient::slotReadyRead()
 {
     QByteArray data = this->socket->readAll();
     this->socket->close();
+    if (this->socket->state() != QAbstractSocket::UnconnectedState)
+        this->socket->waitForDisconnected();
     QJsonObject response = QJsonDocument::fromJson(data).object();
     if (response.contains("username"))
         emit updUsername("You're logged in as "+response["username"].toString());

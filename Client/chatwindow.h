@@ -37,6 +37,8 @@ private slots:
 
     void on_lineEditMessage_textChanged(const QString &arg1);
 
+    void on_actionCreate_triggered();
+
 signals:
     void stopClientManager();
     void startClientManager();

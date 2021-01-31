@@ -14,6 +14,8 @@ class Client: public QObject
 public:
     Client(const quint16 &hostPort);
     virtual ~Client();
+
+public slots:
     void sendData(const QByteArray &data);
 
 private slots:
@@ -24,6 +26,7 @@ private slots:
 signals:
     void setErrorLabelText(QString);
     void switchToChatWindow();
+    void chatSuccessfullyCreated();
 
 private:
     QTcpSocket *socket;

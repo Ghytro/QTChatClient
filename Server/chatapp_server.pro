@@ -20,3 +20,5 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 HEADERS += \
     exceptions.h \
     tcpserver.h
+
+FORMS +=

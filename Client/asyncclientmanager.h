@@ -20,6 +20,9 @@ public slots:
     void slotSetCurrentChatID(int);
     void addPendingMessage(QString);
 
+private slots:
+    void slotStart();
+
 signals:
     void stopped();
     void sendDataFromClient(QByteArray);

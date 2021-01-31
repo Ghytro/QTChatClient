@@ -1,5 +1,6 @@
 #include "chatwindow.h"
 #include "ui_chatwindow.h"
+#include "chatcreationdialog.h"
 
 ChatWindow::ChatWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -67,7 +68,9 @@ void ChatWindow::slotUpdChatList(QJsonArray arr)
     qDebug() << "ChatList updated";
 
     this->chats = arr;
+    this->ui->listWidgetChats->blockSignals(true);
     this->ui->listWidgetChats->clear();
+    this->ui->listWidgetChats->blockSignals(false);
     for (QJsonValue i: this->chats)
         this->ui->listWidgetChats->addItem(i["name"].toString());
 }
@@ -86,8 +89,9 @@ void ChatWindow::openChat(QListWidgetItem *current, QListWidgetItem *previous)
 
     if (chatID == -1)
         return;
-
+    this->ui->listWidgetMessages->blockSignals(true);
     this->ui->listWidgetMessages->clear();
+    this->ui->listWidgetMessages->blockSignals(false);
     this->ui->lineEditMessage->setEnabled(true);
 
     this->messagesInChats[chatID] = QJsonArray();
@@ -136,4 +140,13 @@ void ChatWindow::on_lineEditMessage_textChanged(const QString &arg1)
         this->ui->pushButtonSendMessage->setEnabled(false);
     else
         this->ui->pushButtonSendMessage->setEnabled(true);
+}
+
+void ChatWindow::on_actionCreate_triggered()
+{
+    this->clientManager->stop();
+    ChatCreationDialog ccdialog;
+    ccdialog.setModal(true);
+    ccdialog.exec();
+    this->clientManager->start();
 }

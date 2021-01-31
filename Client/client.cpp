@@ -44,10 +44,12 @@ void Client::slotReadyRead()
 {
     QByteArray data = this->socket->readAll();
     this->socket->close();
+    if (this->socket->state() != QAbstractSocket::UnconnectedState)
+        this->socket->waitForDisconnected();
     QJsonObject jsonObj = QJsonDocument::fromJson(data).object();
-    if (jsonObj["error_code"] == QJsonValue::Null)
+    if (!jsonObj.contains("error_code"))
     {
-        if (jsonObj["new_token"] != QJsonValue::Null) //access_token.update or user.create was called
+        if (jsonObj.contains("new_token")) //access_token.update or user.create was called
         {
             QFile tokenFile("token");
             if (!tokenFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
@@ -57,7 +59,11 @@ void Client::slotReadyRead()
             }
             tokenFile.write(jsonObj["new_token"].toString().toUtf8());
             tokenFile.close();
-            emit switchToChatWindow();
+            emit switchToChatWindow(); //only for auth window
+        }
+        if (jsonObj.contains("chat_id"))
+        {
+            emit chatSuccessfullyCreated();
         }
     }
     else
@@ -72,6 +78,22 @@ void Client::slotReadyRead()
             emit setErrorLabelText("Incorrect username or password");
             break;
 
+        case USER_DOES_NOT_EXIST:
+            emit setErrorLabelText("User doesn't exist");
+            break;
+
+        case NO_CHAT_VISIBILITY:
+            emit setErrorLabelText("Specify chat visibility");
+            break;
+
+        case NO_CHAT_MEMBERS:
+            emit setErrorLabelText("Add at least one member");
+            break;
+
+       case NO_ACCESS_TOKEN:
+            emit setErrorLabelText("Provide access token");
+            break;
+
         default:
             break;
         }
@@ -81,5 +103,6 @@ void Client::slotReadyRead()
 void Client::sendData(const QByteArray &data)
 {
     this->socket->connectToHost(QHostAddress("192.168.50.19"), this->hostPort);
+    this->socket->waitForConnected();
     this->socket->write(data);
 }

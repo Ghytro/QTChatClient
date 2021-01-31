@@ -8,7 +8,7 @@ AsyncClientManager::AsyncClientManager(AsyncClient *client)
             this->client, SLOT(sendData(QByteArray)));
 
     connect(this->client, SIGNAL(gotReply()),
-            this,         SLOT(start()));
+            this,         SLOT(slotStart()));
 }
 
 AsyncClientManager::~AsyncClientManager()
@@ -16,13 +16,21 @@ AsyncClientManager::~AsyncClientManager()
 
 }
 
+void AsyncClientManager::start()
+{
+    this->isWorking = true;
+    this->slotStart();
+}
+
 void AsyncClientManager::slotSetCurrentChatID(int chatID)
 {
     this->currentChatID = chatID;
 }
 
-void AsyncClientManager::start()
+void AsyncClientManager::slotStart()
 {
+    if (!this->isWorking)
+        return;
     //getting user info & verifying token
     //add feature if token is incorrect then
     //open dialog with error and send to auth screen
@@ -54,6 +62,7 @@ void AsyncClientManager::start()
         params.insert("message_to_send", QJsonValue::fromVariant(messageToSend));
     }
     query.insert("params", QJsonValue::fromVariant(params));
+    //qDebug() << query;
     emit sendDataFromClient(QJsonDocument(query).toJson());
     QThread::msleep(100);
 }

@@ -204,13 +204,13 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
                                                                           params["messages_num"].toInt())));
                 response.insert("newest_messages", newestMessages);
             }
-            if (!params.contains("message_to_send"))
+            if (params.contains("message_to_send"))
             {
                 Server::sendMessage(
                             params["message_to_send"].toObject()["chat_id"].toInt(),
                             params["message_to_send"].toObject()["text"].toString(),
                             senderID);
-                qDebug() << "sent message";
+                //qDebug() << "sent message";
             }
             return response;
         }
@@ -429,13 +429,12 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
             apiErr = NO_CHAT_VISIBILITY;
         else if (!params.contains("name"))
             apiErr = NO_CHAT_NAME;
+        else if (!params.contains("members"))
+            apiErr = NO_CHAT_MEMBERS;
         if (apiErr != NULL_ERROR)
             return Server::generateErrorJson(apiErr);
 
-        QJsonArray members;
-        if (!params.contains("members"))
-            members = params["members"].toArray();
-
+        QJsonArray members = params["members"].toArray();
         return Server::createChat(params["name"].toString(),
                                   members,
                                   senderID,
@@ -819,13 +818,25 @@ QString Server::parseQuery(const QString &query)
 }
 
 QJsonObject Server::createChat(const QString&             chatName,
-                           const QJsonArray&       membersIDs,
+                           const QJsonArray&       membersNames,
                            const size_t&           adminID,
                            const bool&             isVisible)
 {
     QDir().mkdir("chats");
     size_t chatID = QDir("chats").count() - 2;
     QDir("chats").mkdir(QString::number(chatID));
+
+    QJsonArray membersIDs;
+    try
+    {
+        for (QJsonValue i: membersNames)
+            membersIDs.append(QJsonValue::fromVariant(Server::getIDFromUsername(i.toString())));
+        membersIDs.append(QJsonValue::fromVariant(adminID));
+    }
+    catch (const UserNotFoundException &e)
+    {
+        return Server::generateErrorJson(USER_DOES_NOT_EXIST);
+    }
 
     QJsonObject json;
     json.insert("name",             QJsonValue::fromVariant(chatName));
@@ -842,6 +853,10 @@ QJsonObject Server::createChat(const QString&             chatName,
         return Server::generateErrorJson(UNKNOWN_ERROR);
     }
     infoFile.write(jsonDoc.toJson());
+
+    for (QJsonValue i: membersIDs)
+        Server::addChatMembership(i.toInt(), chatID);
+
     QJsonObject response;
     response.insert("chat_id", QJsonValue::fromVariant(chatID));
     return response;
@@ -1126,6 +1141,14 @@ QJsonObject Server::kickMember(const size_t &chatID, const size_t &senderID, con
 
 void Server::addChatMembership(const size_t &userID, const size_t &chatID)
 {
+    try
+    {
+        Server::getUsernameByID(userID);
+    }
+    catch (const UserNotFoundException &e)
+    {
+        throw UserNotFoundException();
+    }
     size_t fileID = userID / Server::userChatMembershipBlockSize;
     QFile membershipFile(QStringLiteral("dbase/userchatmembership/%1").arg(fileID));
     if (!membershipFile.open(QIODevice::ReadOnly | QIODevice::Text))

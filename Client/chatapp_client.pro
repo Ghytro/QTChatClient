@@ -11,6 +11,7 @@ CONFIG += c++11
 SOURCES += \
     asyncclient.cpp \
     asyncclientmanager.cpp \
+    chatcreationdialog.cpp \
     chatwindow.cpp \
     client.cpp \
     main.cpp \
@@ -19,11 +20,13 @@ SOURCES += \
 HEADERS += \
     asyncclient.h \
     asyncclientmanager.h \
+    chatcreationdialog.h \
     chatwindow.h \
     client.h \
     mainwindow.h
 
 FORMS += \
+    chatcreationdialog.ui \
     chatwindow.ui \
     mainwindow.ui
 
