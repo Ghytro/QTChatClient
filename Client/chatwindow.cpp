@@ -7,8 +7,8 @@ ChatWindow::ChatWindow(QWidget *parent) :
     ui(new Ui::ChatWindow)
 {
     ui->setupUi(this);
-    connect(this->ui->listWidgetChats, SIGNAL(currentItemChanged(QListWidgetItem*, QListWidgetItem*)),
-            this,                      SLOT(openChat(QListWidgetItem*, QListWidgetItem*)));
+    connect(this->ui->listWidgetChats, SIGNAL(itemActivated(QListWidgetItem*)),
+            this,                      SLOT(openChat(QListWidgetItem*)));
 
     //setting up tcp client manager
     //in a seperate thread
@@ -83,7 +83,7 @@ int ChatWindow::getChatIDByName(const QString &name)
     return -1;
 }
 
-void ChatWindow::openChat(QListWidgetItem *current, QListWidgetItem *previous)
+void ChatWindow::openChat(QListWidgetItem *current)
 {
     int chatID = this->getChatIDByName(current->text());
 
@@ -93,6 +93,7 @@ void ChatWindow::openChat(QListWidgetItem *current, QListWidgetItem *previous)
     this->ui->listWidgetMessages->clear();
     this->ui->listWidgetMessages->blockSignals(false);
     this->ui->lineEditMessage->setEnabled(true);
+    this->ui->labelChatName->setText(current->text());
 
     this->messagesInChats[chatID] = QJsonArray();
     emit setCurrentChatID(chatID);
@@ -124,7 +125,9 @@ void ChatWindow::slotUpdNewestMessages(size_t chatID, QJsonArray latestMessages)
         if (latestMessages[i].toObject()["type"] != QJsonValue::Null)
             messageSender = "SystemBot";
 
-        this->ui->listWidgetMessages->addItem(QStringLiteral("<%1> %2 says: %3")
+        if (this->ui->labelUsername->text().endsWith(messageSender))
+            messageSender = "You";
+        this->ui->listWidgetMessages->addItem(QStringLiteral("<%1> %2: %3")
                                               .arg(latestMessages[i].toObject()["date"].toString())
                                               .arg(messageSender)
                                               .arg(latestMessages[i].toObject()["text"].toString()));

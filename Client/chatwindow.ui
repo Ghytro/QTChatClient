@@ -42,7 +42,14 @@
        </layout>
       </item>
       <item>
-       <layout class="QVBoxLayout" name="verticalLayoutMessages" stretch="0,0">
+       <layout class="QVBoxLayout" name="verticalLayoutMessages" stretch="0,0,0">
+        <item>
+         <widget class="QLabel" name="labelChatName">
+          <property name="text">
+           <string>Select chat to start messaging!</string>
+          </property>
+         </widget>
+        </item>
         <item>
          <widget class="QListWidget" name="listWidgetMessages">
           <property name="sizePolicy">

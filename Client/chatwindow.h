@@ -33,7 +33,7 @@ private:
 private slots:
     void slotUpdUsername(QString);
     void slotUpdChatList(QJsonArray);
-    void openChat(QListWidgetItem*, QListWidgetItem*);
+    void openChat(QListWidgetItem*);
     void slotUpdNewestMessages(size_t, QJsonArray);
 
     void on_pushButtonSendMessage_released();
