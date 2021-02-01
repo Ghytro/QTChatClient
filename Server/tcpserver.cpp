@@ -186,16 +186,11 @@ QJsonObject Server::callApiMethod(const QString &method, const QJsonObject &para
     {
         try
         {
-            if (!params.contains("current_chat_id"))
-                return Server::generateErrorJson(NO_CHAT_ID);
-
-            if (!params.contains("messages_num"))
-                return Server::generateErrorJson(NO_LAST_MESSAGES_NUM);
-
             QJsonObject response;
             response.insert("username", QJsonValue::fromVariant(Server::getUsernameByID(senderID)));
             response.insert("chat_membership", QJsonValue::fromVariant(Server::getChatMembership(senderID)));
-            if (params["current_chat_id"].toInt() >= 0)
+            if (params.contains("current_chat_id") && params["current_chat_id"].toInt() >= 0
+             && params.contains("messages_num") && params["messages_num"].toInt() > 0)
             {
                 QJsonObject newestMessages;
                 newestMessages.insert("chat_id", params["current_chat_id"].toInt());

@@ -10,6 +10,8 @@ namespace Ui {
 class ChatWindow;
 }
 
+class ChatCreationDialog;
+
 class ChatWindow : public QMainWindow
 {
     Q_OBJECT
@@ -17,6 +19,7 @@ class ChatWindow : public QMainWindow
 public:
     explicit ChatWindow(QWidget *parent = nullptr);
     ~ChatWindow();
+    friend class ChatCreationDialog;
 
 private:
     Ui::ChatWindow *ui;

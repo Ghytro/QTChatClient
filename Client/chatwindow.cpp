@@ -142,16 +142,13 @@ void ChatWindow::on_pushButtonSendMessage_released()
 
 void ChatWindow::on_lineEditMessage_textChanged(const QString &arg1)
 {
-    if (arg1 == "")
-        this->ui->pushButtonSendMessage->setEnabled(false);
-    else
-        this->ui->pushButtonSendMessage->setEnabled(true);
+    this->ui->pushButtonSendMessage->setEnabled(arg1.length() != 0);
 }
 
 void ChatWindow::on_actionCreate_triggered()
 {
     this->clientManager->stop();
-    ChatCreationDialog ccdialog;
+    ChatCreationDialog ccdialog(this);
     ccdialog.setModal(true);
     ccdialog.exec();
     this->clientManager->start();

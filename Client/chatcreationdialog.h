@@ -33,6 +33,8 @@ private slots:
 
     void on_pushButtonCancel_released();
 
+    void on_lineEditAddMember_textChanged(const QString &arg1);
+
 signals:
     void sendDataFromClient(QByteArray);
 

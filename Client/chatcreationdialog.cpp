@@ -1,5 +1,7 @@
 #include "chatcreationdialog.h"
 #include "ui_chatcreationdialog.h"
+#include "chatwindow.h"
+#include "ui_chatwindow.h"
 
 ChatCreationDialog::ChatCreationDialog(QWidget *parent) :
     QDialog(parent),
@@ -31,6 +33,15 @@ void ChatCreationDialog::on_pushButtonAddMember_released()
     QString username = this->ui->lineEditAddMember->text();
     if (username.contains(" ") || username == "") //wrong username
         return;
+
+    //checking if username is your own
+
+    if (qobject_cast<ChatWindow*>(this->parentWidget())->ui->labelUsername->text().endsWith(username))
+    {
+        slotSetErrorLabelText("You can't add yourself as a member");
+        return;
+    }
+
     this->ui->listWidgetMembers->addItem(username);
     this->ui->lineEditAddMember->clear();
 }
@@ -106,4 +117,9 @@ void ChatCreationDialog::slotSetErrorLabelText(QString text)
 void ChatCreationDialog::on_pushButtonCancel_released()
 {
     this->close();
+}
+
+void ChatCreationDialog::on_lineEditAddMember_textChanged(const QString &arg1)
+{
+    this->ui->pushButtonAddMember->setEnabled(arg1.length() != 0);
 }
