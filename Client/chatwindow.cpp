@@ -102,15 +102,20 @@ void ChatWindow::slotUpdNewestMessages(size_t chatID, QJsonArray latestMessages)
 {
     //getting actual info to data
     int rightOffset = latestMessages.size();
-    if (messagesInChats[chatID].size() != 0)
+    if (this->messagesInChats[chatID].size() != 0)
     {
         int serverLastMessageID = latestMessages.last().toObject()["id"].toInt();
         int localLastMessageID  = this->messagesInChats[chatID].last().toObject()["id"].toInt();
 
         rightOffset = serverLastMessageID - localLastMessageID;
     }
-
-    bool elementsAdded = false; //scroll down if user is chatting rn
+    bool scrollDown = false;
+    if (rightOffset != 0) //got any elements to add
+    {
+        QScrollBar *scrollbar = this->ui->listWidgetMessages->verticalScrollBar();
+        if (scrollbar->value() == scrollbar->maximum()) //the slider is at the end
+            scrollDown = true;
+    }
     for (int i = latestMessages.size() - rightOffset; i < latestMessages.size(); ++i)
     {
         this->messagesInChats[chatID].append(latestMessages[i]);
@@ -123,8 +128,9 @@ void ChatWindow::slotUpdNewestMessages(size_t chatID, QJsonArray latestMessages)
                                               .arg(latestMessages[i].toObject()["date"].toString())
                                               .arg(messageSender)
                                               .arg(latestMessages[i].toObject()["text"].toString()));
-        elementsAdded = true;
     }
+    if (scrollDown)
+        this->ui->listWidgetMessages->scrollToBottom();
 }
 
 void ChatWindow::on_pushButtonSendMessage_released()
